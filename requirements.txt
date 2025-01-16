@@ -1,6 +1,6 @@
 opencv-python
-elevenlabs
-captacity
-openai
+google-generativeai
+gTTS
+requests
 pydub
 numpy

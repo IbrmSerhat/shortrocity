@@ -1,7 +1,6 @@
 from pydub import AudioSegment
 import subprocess
 import numpy as np
-import captacity
 import json
 import math
 import cv2
@@ -73,12 +72,12 @@ def create(narrations, output_dir, output_filename, caption_settings: dict|None 
 
     # Load images and perform the transition effect
     for i in range(image_count):
-        image1 = cv2.imread(os.path.join(output_dir, "images", f"image_{i+1}.webp"))
+        image1 = cv2.imread(os.path.join(output_dir, "images", f"image_{i+1}.png"))
 
         if i+1 < image_count:
-            image2 = cv2.imread(os.path.join(output_dir, "images", f"image_{i+2}.webp"))
+            image2 = cv2.imread(os.path.join(output_dir, "images", f"image_{i+2}.png"))
         else:
-            image2 = cv2.imread(os.path.join(output_dir, "images", f"image_1.webp"))
+            image2 = cv2.imread(os.path.join(output_dir, "images", f"image_1.png"))
 
         image1 = resize_image(image1, width, height)
         image2 = resize_image(image2, width, height)
@@ -99,59 +98,33 @@ def create(narrations, output_dir, output_filename, caption_settings: dict|None 
             out.write(vertical_video_frame)
 
         for alpha in np.linspace(0, 1, math.floor(fade_time/1000*30)):
-            blended_image = cv2.addWeighted(image1, 1 - alpha, image2, alpha, 0)
+            blended = cv2.addWeighted(image1, 1-alpha, image2, alpha, 0)
             vertical_video_frame = np.zeros((height, width, 3), dtype=np.uint8)
-            vertical_video_frame[:image1.shape[0], :] = blended_image
+            vertical_video_frame[:blended.shape[0], :] = blended
 
             out.write(vertical_video_frame)
 
-    # Release the VideoWriter and close the window if any
     out.release()
-    cv2.destroyAllWindows()
 
-    # Add narration audio to video
-    with_narration = "with_narration.mp4"
-    add_narration_to_video(narrations, temp_video, output_dir, with_narration)
+    add_narration_to_video(narrations, temp_video, output_dir, output_filename)
 
-    # Add captions to video
-    output_path = os.path.join(output_dir, output_filename)
-    input_path = os.path.join(output_dir, with_narration)
-    segments = create_segments(narrations, output_dir)
-
-    captacity.add_captions(
-        video_file=input_path,
-        output_file=output_path,
-        segments=segments,
-        print_info=True,
-        **caption_settings,
-    )
-
-    # Clean up temporary files
-    os.remove(input_path)
     os.remove(temp_video)
 
 def create_segments(narrations, output_dir):
     segments = []
+    current_time = 0
 
-    offset = 0
     for i, narration in enumerate(narrations):
-        audio_file = os.path.join(output_dir, "narrations", f"narration_{i+1}.mp3")
+        narration_file = os.path.join(output_dir, "narrations", f"narration_{i+1}.mp3")
+        duration = get_audio_duration(narration_file)
 
-        try:
-            t_segments = captacity.transcriber.transcribe_locally(
-                audio_file=audio_file,
-                prompt=narration,
-            )
-        except ImportError:
-            t_segments = captacity.transcriber.transcribe_with_api(
-                audio_file=audio_file,
-                prompt=narration,
-            )
+        segments.append({
+            "text": narration,
+            "start": current_time,
+            "end": current_time + duration,
+        })
 
-        o_segments = offset_segments(t_segments, offset)
-
-        segments += o_segments
-        offset += get_audio_duration(audio_file) / 1000
+        current_time += duration
 
     return segments
 
@@ -159,7 +132,4 @@ def offset_segments(segments: list[dict], offset: float):
     for segment in segments:
         segment["start"] += offset
         segment["end"] += offset
-        for word in segment["words"]:
-            word["start"] += offset
-            word["end"] += offset
     return segments

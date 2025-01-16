@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from openai import OpenAI
+import google.generativeai as genai
 import time
 import json
 import sys
@@ -10,13 +10,14 @@ import narration
 import images
 import video
 
-client = OpenAI()
+GEMINI_API_KEY = "AIzaSyA0pskFvbYOPMTPSd7H1bkXfWMBMdK61Ec"
+genai.configure(api_key=GEMINI_API_KEY)
 
 if len(sys.argv) < 2:
     print(f"Usage: {sys.argv[0]} <source_file> [settings_file]")
     sys.exit(1)
 
-with open(sys.argv[1]) as f:
+with open(sys.argv[1], encoding='utf-8') as f:
     source_material = f.read()
 
 caption_settings = {}
@@ -33,51 +34,37 @@ if not os.path.exists(basedir):
 
 print("Generating script...")
 
-response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[
-        {
-            "role": "system",
-            "content": """You are a YouTube short narration generator. You generate 30 seconds to 1 minute of narration. The shorts you create have a background that fades from image to image as the narration is going on.
+# Configure the model
+model = genai.GenerativeModel('gemini-pro')
 
-You will need to generate descriptions of images for each of the sentences in the short. They will be passed to an AI image generator. DO NOT IN ANY CIRCUMSTANCES use names of celebrities or people in the image descriptions. It is illegal to generate images of celebrities. Only describe persons without their names. Do not reference any real person or group in the image descriptions. Don't mention the female figure or other sexual content in the images because they are not allowed.
+prompt = """Sen bir YouTube shorts anlatıcısısın. 30 saniye ile 1 dakika arasında bir anlatım oluştur. Oluşturduğun shortslar, anlatım devam ederken arka planda bir görüntüden diğerine geçiş yapan bir yapıya sahip.
 
-You are however allowed to use any content, including real names in the narration. Only image descriptions are restricted.
+Shortstaki her cümle için görüntü açıklamaları oluşturman gerekecek. Bunlar bir yapay zeka görüntü oluşturucuya gönderilecek. HİÇBİR KOŞULDA görüntü açıklamalarında ünlü veya kişi isimlerini kullanma. Ünlülerin görüntülerini oluşturmak yasadışıdır. Kişileri sadece isimsiz olarak tanımla. Görüntü açıklamalarında herhangi bir gerçek kişi veya grubu referans gösterme. Görüntülerde kadın figürü veya diğer cinsel içeriklerden bahsetme çünkü bunlara izin verilmiyor.
 
-Note that the narration will be fed into a text-to-speech engine, so don't use special characters.
+Ancak anlatımda her türlü içeriği, gerçek isimler dahil kullanabilirsin. Sadece görüntü açıklamaları kısıtlıdır.
 
-Respond with a pair of an image description in square brackets and a narration below it. Both of them should be on their own lines, as follows:
+Not: Anlatım bir metin-ses dönüştürücüye beslenecek, bu yüzden özel karakterler kullanma.
 
-###
+Aşağıdaki kaynak materyale dayalı bir YouTube shorts anlatımı oluştur:
 
-[Description of a background image]
+{source_material}
 
-Narrator: "One sentence of narration"
+Yanıtını köşeli parantez içinde bir görüntü açıklaması ve altında bir anlatım olacak şekilde ver. Her ikisi de kendi satırlarında olmalı, aşağıdaki gibi:
 
-[Description of a background image]
+[Bir arka plan görüntüsünün açıklaması]
+Anlatıcı: "Bir cümlelik anlatım"
 
-Narrator: "One sentence of narration"
+[Bir arka plan görüntüsünün açıklaması]
+Anlatıcı: "Bir cümlelik anlatım"
 
-[Description of a background image]
+[Bir arka plan görüntüsünün açıklaması]
+Anlatıcı: "Bir cümlelik anlatım"
 
-Narrator: "One sentence of narration"
-
-###
-
-The short should be 6 sentences maximum.
-
-You should add a description of a fitting backround image in between all of the narrations. It will later be used to generate an image with AI.
+Short en fazla 6 cümle olmalı.
 """
-        },
-        {
-            "role": "user",
-            "content": f"Create a YouTube short narration based on the following source material:\n\n{source_material}"
-        }
-    ]
-)
 
-response_text = response.choices[0].message.content
-response_text.replace("’", "'").replace("`", "'").replace("…", "...").replace("“", '"').replace("”", '"')
+response = model.generate_content(prompt.format(source_material=source_material))
+response_text = response.text
 
 with open(os.path.join(basedir, "response.txt"), "w") as f:
     f.write(response_text)
